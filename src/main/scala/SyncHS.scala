@@ -61,9 +61,7 @@ object SyncHS {
       while (!leaderElected.get()) {
         haveSetReplyDoneThrds = false
         phaseDone = false
-        /*  if
-        *       node is still in running for leader position, keep sending neighbours probe messages and reply to other probe
-        * */
+        /*  if     node is still in running for leader position, keep sending neighbours probe messages and reply to other probe  */
         while (isInRace) {
           // broadcast probe message to the neighbours and wait till we get replys for those
 
@@ -101,7 +99,7 @@ object SyncHS {
                 }
                 else if (id > p.id ) {
                   //println(s"$id sending reject to $p.id")
-                  if (p.dir == true) thrdMsgsMap.get(this.left).put(RejectMsg(p.id, !p.dir))
+                  if (p.dir) thrdMsgsMap.get(this.left).put(RejectMsg(p.id, !p.dir))
                   else thrdMsgsMap.get(this.right).put(RejectMsg(p.id, !p.dir))
                 }
                 else {
@@ -112,7 +110,7 @@ object SyncHS {
                 if (id == rp.id) {
                   //println(s"$id Got reply ")
                   replyCount = replyCount + 1
-                  if(replyCount == 2)  {
+                  if((replyCount == 2) || (rejectCount == 1 && replyCount == 1))  {
                     println(s"$id TempLeader at $phase")
                     println(s" $id incrementing count of replyDoneThrds")
                     replyDoneThreads.getAndIncrement()
@@ -126,7 +124,7 @@ object SyncHS {
               case rj: RejectMsg =>
                 if (id == rj.id) {
                   rejectCount = rejectCount + 1
-                  if(rejectCount == 2){
+                  if ((rejectCount == 2) || (rejectCount == 1 && replyCount == 1)) {
                     //println(s"$id incrementing rejectDone")
                     replyDoneThreads.getAndIncrement()
                     haveSetReplyDoneThrds = true
@@ -145,11 +143,6 @@ object SyncHS {
                 cyclicBarrier.await()
               case null => ; // do nothing
               case _ => //println("Something wrong going in here  Match didnot find any matches when inRace")
-            }
-            if (!haveSetReplyDoneThrds && (rejectCount == 1 && replyCount == 1)) {
-              replyDoneThreads.getAndIncrement()
-              haveSetReplyDoneThrds = true
-              //println(s"$id incremeting Special ")
             }
             if (((rejectCount == 2 | replyCount == 2 | (replyCount + rejectCount == 2) ) |(phaseDone) )&& replyDoneThreads.get() == prevTLeaderCount.get() ){
               if(rejectCount >= 1 ) {
@@ -212,7 +205,7 @@ object SyncHS {
                 if (lm.dir == true) thrdMsgsMap.get(right).put(lm.copy()) else thrdMsgsMap.get(left).put(lm.copy())
                 phaseDone = true
                 cyclicBarrier.await()
-              case null => {} // do nothing
+              case null => // do nothing
               case _ => ////println("Something wrong", msg.toString())
             }
             /*if ((rejectCount == 2 | replyCount ==2 | (replyCount + rejectCount == 2) ) | (phaseDone | forwardCount ==0 ) & msgCount >= 2)  {
@@ -254,26 +247,20 @@ object SyncHS {
       val left = if (pos == 0) ids(numThrds - 1) else ids(pos - 1)
       val right = if (pos == numThrds - 1) ids(0) else ids(pos + 1)
       ////println(left, right)
-      (new Thread(new Node(id, left, right, barrier), id.toString)).start()
+      new Thread(new Node(id, left, right, barrier), id.toString).start()
     }
 
     try
         while (!leaderElected.get()){
-          //this.wait(10L)
-          ////println(prevTLeaderCount.get(), "and barrier waiting =", barrier.getNumberWaiting())
-          if (barrier.getNumberWaiting() == prevTLeaderCount.get()) {   // check if all the prevTLeaders are waiting ... that means they are done .. time to switch off the other threads
-            //println("-----------------------------------------------------")
-            //println("All threads waiting ")
-            //println("-----------------------------------------------------")
 
+          if (barrier.getNumberWaiting == prevTLeaderCount.get()) {   // check if all the prevTLeaders are waiting ... that means they are done .. time to switch off the other threads
             doneTLeaderThreads.set(prevTLeaderCount.get())
-            while(!(barrier.getNumberWaiting() == numThrds)){Thread.sleep(10)}  // wait till the relay threads notice that TempLeaders are done and they do barrier.await
+
+            while (!(barrier.getNumberWaiting == numThrds)){Thread.sleep(10)}  // wait till the relay threads notice that TempLeaders are done and they do barrier.await
+
             doneTLeaderThreads.set(0)
             val now = presentTLeaderCount.get()
             prevTLeaderCount.set(now)
-
-            //println(s"now = $now   prev = ")
-            //println("-------------------------------------------------------------")
             replyDoneThreads.set(0)
             barrier.await()
 
@@ -283,10 +270,12 @@ object SyncHS {
       case e: InterruptedException => e.printStackTrace()
       case e: BrokenBarrierException => e.printStackTrace()
     }
-    if (leaderElected.get() == true) {
-      barrier.reset()
+    if (leaderElected.get()) {
+      do {
+          Thread.sleep(10)
+        } while (barrier.getNumberWaiting() != numThrds)
+      System.exit(1)
     }
-    System.exit(1)
   }
 
 
@@ -296,7 +285,13 @@ object SyncHS {
     try {
       val input= Source.fromFile(path).getLines().map(_.toInt).toSeq
       ids.insertAll(0,input)
-      require(input.size == input.toSet.size, {println("UIDS are not unique! this algorithm assumes UIDS"); System.exit(1)})
+      require(input.size == input.toSet.size, {
+        println("UIDS are not unique! this algorithm assumes UIDS")
+        input.map( id => (id,1)).groupBy(_._1).collect {
+          case (id,count ) => if (count.size > 1) println(s"Duplicate : $id  count -> ", count.size )
+        }
+        System.exit(1)
+      })
     } catch{
       case e :FileNotFoundException => println(e.printStackTrace())
       case e :Exception => println(e.printStackTrace())
@@ -305,8 +300,6 @@ object SyncHS {
       System.err.println("Leader election is trivial in graphs with less than 2 nodes")
       System.exit(1)
     }
-    //for(id<- ids) //println(id)
-
     ids
   }
 }
