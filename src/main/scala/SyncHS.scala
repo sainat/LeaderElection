@@ -73,12 +73,8 @@ object SyncHS {
           phaseDone = false
 
           while (!phaseDone) {
-            ////println(s"$id am still in race ")
-            // below call blocks until reply to above messages are in the queue for this thread
-            val msg = thrdMsgsMap.get(id).poll(10L, TimeUnit.NANOSECONDS)
-            if(msg == null) {////println(s"---------------$id timed out waiting for msg")
-            }
-            else totalMsgCount += 1
+            val msg = thrdMsgsMap.get(id).poll(10L, TimeUnit.NANOSECONDS) // call blocks until reply to above messages are in the queue for this thread
+            if (msg != null) totalMsgCount += 1
             (msg: AnyRef) match {
               case p: ProbeMsg =>
                 if (id == p.id) {
@@ -206,21 +202,16 @@ object SyncHS {
                 phaseDone = true
                 cyclicBarrier.await()
               case null => // do nothing
-              case _ => ////println("Something wrong", msg.toString())
+              case _ => println("Something wrong", msg.toString())
             }
-            /*if ((rejectCount == 2 | replyCount ==2 | (replyCount + rejectCount == 2) ) | (phaseDone | forwardCount ==0 ) & msgCount >= 2)  {
-              phaseDone = true ; //println(s"Waiting $id") ; cyclicBarrier.await(); //println(s"$id released") ;//phase += 1
-            }*/
             if (doneTLeaderThreads.get() == prevTLeaderCount.get()) {
               phaseDone = true
               cyclicBarrier.await()
-              //println(s"$id released")
             }
           }
           phase = phase + 1
         }
       }
-      //println(s"$id Exiting leader = $leader")
     }
   }
 
