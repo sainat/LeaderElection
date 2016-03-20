@@ -1,7 +1,19 @@
-/*
 /**
-  * Created by Tiru on 2/23/2016.
-  */
+  * Created by Tiru on 2/23/2016.*/
+/*
+
+object Test{
+  def print( x: Int) = (2,3)
+  def main(args: Array[String]) {
+    var x = 20
+    var y = 30
+    (x,y) = print(5)
+  }
+}
+*/
+
+
+/*
 import util.control.Breaks._
 import java.util.concurrent.CyclicBarrier
 
@@ -31,4 +43,5 @@ object Test {
       }
     println("BYe ")
   }
-}*/
+}
+*/
